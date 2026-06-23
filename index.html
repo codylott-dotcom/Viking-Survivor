@@ -27,10 +27,11 @@ let day = 1;
 let minutes = 420;
 let movementCounter = 0;
 let recipeBookOpen = false;
+let campfirePanelOpen = false;
+let selectedCampfire = null;
 let selectedTab = "Tools";
 let message = "";
 let messageTimer = 0;
-
 let currentAction = null;
 
 const keys = {};
@@ -73,7 +74,7 @@ document.addEventListener("keydown", e => {
 
     if (!keys[key]) {
         if (key === "e") startGather();
-        if (key === "f") eatBerries();
+        if (key === "f") eatFood();
         if (key === " ") attack();
     }
 
@@ -91,6 +92,16 @@ canvas.addEventListener("click", e => {
         if (mx >= b.x && mx <= b.x+b.w && my >= b.y && my <= b.y+b.h) {
             b.action();
             return;
+        }
+    }
+
+    if (!recipeBookOpen && !campfirePanelOpen && !currentAction) {
+        for (const fire of campfires) {
+            if (mx >= fire.x && mx <= fire.x + fire.size && my >= fire.y && my <= fire.y + fire.size) {
+                selectedCampfire = fire;
+                campfirePanelOpen = true;
+                return;
+            }
         }
     }
 });
@@ -138,11 +149,21 @@ function advanceTime(amount) {
     player.hunger -= amount * 0.04;
     player.thirst -= amount * 0.06;
 
+    campfires.forEach(fire => {
+        if (fire.lit) {
+            fire.fuel -= amount;
+            if (fire.fuel <= 0) {
+                fire.fuel = 0;
+                fire.lit = false;
+            }
+        }
+    });
+
     if (player.hunger <= 0 || player.thirst <= 0) {
         player.health -= amount * 0.08;
     }
 
-    if (isNight() && !nearCampOrShelter()) {
+    if (isNight() && !nearLitCampfireOrShelter()) {
         player.health -= amount * 0.04;
     }
 
@@ -163,8 +184,8 @@ function isNight() {
     return minutes < 360 || minutes >= 1080;
 }
 
-function nearCampOrShelter() {
-    for (const f of campfires) if (distance(player, f) < 100) return true;
+function nearLitCampfireOrShelter() {
+    for (const f of campfires) if (f.lit && distance(player, f) < 120) return true;
     for (const s of shelters) if (distance(player, s) < 100) return true;
     return false;
 }
@@ -186,7 +207,7 @@ function update() {
 
     let moved = false;
 
-    if (!recipeBookOpen && !currentAction) {
+    if (!recipeBookOpen && !campfirePanelOpen && !currentAction) {
         if (keys["w"]) { player.y -= player.speed; moved = true; }
         if (keys["s"]) { player.y += player.speed; moved = true; }
         if (keys["a"]) { player.x -= player.speed; moved = true; }
@@ -245,7 +266,7 @@ function updateMonsters() {
         const chaseRange = isNight() ? 350 : 250;
         const monsterSpeed = isNight() ? monster.speed * 1.5 : monster.speed;
 
-        if (distance(player, monster) < chaseRange && !recipeBookOpen) {
+        if (distance(player, monster) < chaseRange && !recipeBookOpen && !campfirePanelOpen) {
             if (monster.x < player.x) monster.x += monsterSpeed;
             if (monster.x > player.x) monster.x -= monsterSpeed;
             if (monster.y < player.y) monster.y += monsterSpeed;
@@ -263,7 +284,7 @@ function updateMonsters() {
 }
 
 function startGather() {
-    if (recipeBookOpen || currentAction) return;
+    if (recipeBookOpen || campfirePanelOpen || currentAction) return;
 
     for (const t of trees) {
         if (isTouching(player,t)) {
@@ -328,19 +349,30 @@ function startGather() {
     setMessage("Nothing to gather.");
 }
 
-function eatBerries() {
+function eatFood() {
     if (currentAction) return;
+
+    if (player.cookedMeat > 0 && player.hunger < 100) {
+        player.cookedMeat--;
+        player.hunger = Math.min(100, player.hunger + 40);
+        advanceTime(10);
+        setMessage("Ate cooked meat.");
+        return;
+    }
 
     if (player.berries > 0 && player.hunger < 100) {
         player.berries--;
         player.hunger = Math.min(100, player.hunger + 15);
         advanceTime(5);
         setMessage("Ate berries.");
+        return;
     }
+
+    setMessage("No food to eat or not hungry.");
 }
 
 function attack() {
-    if (recipeBookOpen || currentAction) return;
+    if (recipeBookOpen || campfirePanelOpen || currentAction) return;
 
     let hit = false;
 
@@ -385,10 +417,67 @@ function startCraft(recipe) {
             player.weapon = "Stone Spear";
             player.attackDamage = 30;
         }
-        if (recipe.name === "Campfire") campfires.push({x:player.x+40,y:player.y,size:30});
+        if (recipe.name === "Campfire") campfires.push({x:player.x+40,y:player.y,size:30,fuel:0,lit:false});
         if (recipe.name === "Lean-To") shelters.push({x:player.x+40,y:player.y,size:45});
 
         setMessage("Finished " + recipe.name + ".");
+    });
+}
+
+function addFuel() {
+    if (!selectedCampfire) return;
+
+    if (player.wood <= 0) {
+        setMessage("Need wood for fuel.");
+        return;
+    }
+
+    player.wood--;
+    selectedCampfire.fuel += 2;
+    advanceTime(2);
+    setMessage("Added wood. +2 minutes fuel.");
+}
+
+function lightFire() {
+    if (!selectedCampfire) return;
+
+    if (selectedCampfire.fuel <= 0) {
+        setMessage("Add fuel first.");
+        return;
+    }
+
+    selectedCampfire.lit = true;
+    advanceTime(5);
+    setMessage("Campfire lit.");
+}
+
+function extinguishFire() {
+    if (!selectedCampfire) return;
+
+    selectedCampfire.lit = false;
+    advanceTime(2);
+    setMessage("Campfire extinguished.");
+}
+
+function cookMeat() {
+    if (!selectedCampfire) return;
+
+    if (!selectedCampfire.lit) {
+        setMessage("Fire must be lit.");
+        return;
+    }
+
+    if (player.meat <= 0) {
+        setMessage("No raw meat to cook.");
+        return;
+    }
+
+    campfirePanelOpen = false;
+
+    startAction("Cooking Meat", 180, 5, () => {
+        player.meat--;
+        player.cookedMeat++;
+        setMessage("Cooked 1 meat.");
     });
 }
 
@@ -477,8 +566,13 @@ function draw() {
     });
 
     campfires.forEach(f => {
-        ctx.fillStyle = "orange";
+        ctx.fillStyle = f.lit ? "orange" : "#7a3f12";
         ctx.fillRect(f.x,f.y,f.size,f.size);
+
+        if (f.lit) {
+            ctx.fillStyle = "yellow";
+            ctx.fillRect(f.x+8,f.y-8,14,14);
+        }
     });
 
     shelters.forEach(s => {
@@ -507,10 +601,11 @@ function draw() {
 
     drawHUD();
     drawButton(820,20,150,40,"Recipe Book",() => {
-        if (!currentAction) recipeBookOpen = true;
+        if (!currentAction && !campfirePanelOpen) recipeBookOpen = true;
     });
 
     if (recipeBookOpen) drawRecipeBook();
+    if (campfirePanelOpen) drawCampfirePanel();
 
     drawActionBar();
 
@@ -543,7 +638,7 @@ function drawHUD() {
     ctx.fillText("Weapon: " + player.weapon,20,315);
 
     if (messageTimer > 0) ctx.fillText(message,330,40);
-    ctx.fillText("WASD Move | E Gather | F Eat | Space Attack | Mouse Craft",20,580);
+    ctx.fillText("WASD Move | E Gather | F Eat Best Food | Space Attack | Click Fire",20,580);
 }
 
 function drawRecipeBook() {
@@ -574,6 +669,34 @@ function drawRecipeBook() {
         ctx.fillText("Cost: " + r.wood + " Wood, " + r.stone + " Stone",260,y+25);
         ctx.fillText("Time: " + r.time + " minutes",260,y+45);
         drawButton(600,y-25,110,40,"Craft",() => startCraft(r));
+    });
+}
+
+function drawCampfirePanel() {
+    if (!selectedCampfire) return;
+
+    ctx.fillStyle = "rgba(0,0,0,0.88)";
+    ctx.fillRect(300,100,400,390);
+    ctx.strokeStyle = "white";
+    ctx.strokeRect(300,100,400,390);
+
+    ctx.fillStyle = "white";
+    ctx.font = "26px Arial";
+    ctx.fillText("Campfire",330,145);
+
+    ctx.font = "18px Arial";
+    ctx.fillText("State: " + (selectedCampfire.lit ? "Lit" : "Unlit"),330,185);
+    ctx.fillText("Fuel: " + Math.floor(selectedCampfire.fuel) + " minutes",330,215);
+    ctx.fillText("Raw Meat: " + player.meat,330,245);
+    ctx.fillText("Cooked Meat: " + player.cookedMeat,330,275);
+
+    drawButton(330,305,150,40,"Add Wood",addFuel);
+    drawButton(510,305,150,40,"Light Fire",lightFire);
+    drawButton(330,360,150,40,"Cook Meat",cookMeat);
+    drawButton(510,360,150,40,"Extinguish",extinguishFire);
+    drawButton(430,420,140,40,"Close",() => {
+        campfirePanelOpen = false;
+        selectedCampfire = null;
     });
 }
 
