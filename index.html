@@ -11,7 +11,8 @@ canvas { display: block; margin: auto; background: #4d9a4d; }
 <canvas id="game" width="1000" height="600"></canvas>
 
 <script>
-    const GAME_VERSION = "v0.5.1
+const GAME_VERSION = "v0.5.2";
+
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
@@ -90,7 +91,7 @@ canvas.addEventListener("click", e => {
     const my = e.clientY - rect.top;
 
     for (const b of buttons) {
-        if (mx >= b.x && mx <= b.x+b.w && my >= b.y && my <= b.y+b.h) {
+        if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
             b.action();
             return;
         }
@@ -113,10 +114,7 @@ function setMessage(text) {
 }
 
 function startAction(name, durationFrames, timeCost, complete) {
-    if (currentAction) {
-        setMessage("Already doing something.");
-        return;
-    }
+    if (currentAction) return setMessage("Already doing something.");
 
     currentAction = {
         name,
@@ -192,13 +190,16 @@ function nearLitCampfireOrShelter() {
 }
 
 function isTouching(a,b) {
-    return a.x < b.x+b.size && a.x+a.size > b.x && a.y < b.y+b.size && a.y+a.size > b.y;
+    return a.x < b.x + b.size &&
+           a.x + a.size > b.x &&
+           a.y < b.y + b.size &&
+           a.y + a.size > b.y;
 }
 
 function distance(a,b) {
-    const dx = (a.x+a.size/2)-(b.x+b.size/2);
-    const dy = (a.y+a.size/2)-(b.y+b.size/2);
-    return Math.sqrt(dx*dx+dy*dy);
+    const dx = (a.x + a.size / 2) - (b.x + b.size / 2);
+    const dy = (a.y + a.size / 2) - (b.y + b.size / 2);
+    return Math.sqrt(dx * dx + dy * dy);
 }
 
 function update() {
@@ -225,8 +226,8 @@ function update() {
 
     if (messageTimer > 0) messageTimer--;
 
-    player.x = Math.max(0, Math.min(canvas.width-player.size, player.x));
-    player.y = Math.max(0, Math.min(canvas.height-player.size, player.y));
+    player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
+    player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
 
     updateResources();
     updateMonsters();
@@ -418,8 +419,8 @@ function startCraft(recipe) {
             player.weapon = "Stone Spear";
             player.attackDamage = 30;
         }
-        if (recipe.name === "Campfire") campfires.push({x:player.x+40,y:player.y,size:30,fuel:0,lit:false});
-        if (recipe.name === "Lean-To") shelters.push({x:player.x+40,y:player.y,size:45});
+        if (recipe.name === "Campfire") campfires.push({x:player.x + 40,y:player.y,size:30,fuel:0,lit:false});
+        if (recipe.name === "Lean-To") shelters.push({x:player.x + 40,y:player.y,size:45});
 
         setMessage("Finished " + recipe.name + ".");
     });
@@ -489,7 +490,7 @@ function drawButton(x,y,w,h,text,action) {
     ctx.strokeRect(x,y,w,h);
     ctx.fillStyle = "white";
     ctx.font = "16px Arial";
-    ctx.fillText(text,x+10,y+24);
+    ctx.fillText(text,x + 10,y + 24);
     buttons.push({x,y,w,h,action});
 }
 
@@ -534,15 +535,15 @@ function draw() {
     trees.forEach(t => {
         if (t.depleted) {
             ctx.fillStyle = "#5b3a1e";
-            ctx.fillRect(t.x+8,t.y+20,18,12);
+            ctx.fillRect(t.x + 8,t.y + 20,18,12);
         } else {
             ctx.fillStyle = "#5b3a1e";
-            ctx.fillRect(t.x+12,t.y+20,10,25);
+            ctx.fillRect(t.x + 12,t.y + 20,10,25);
             ctx.fillStyle = "#0f5c20";
             ctx.fillRect(t.x,t.y,t.size,t.size);
             ctx.fillStyle = "white";
             ctx.font = "12px Arial";
-            ctx.fillText(t.wood,t.x+10,t.y-5);
+            ctx.fillText(t.wood,t.x + 10,t.y - 5);
         }
     });
 
@@ -552,7 +553,7 @@ function draw() {
         if (!r.depleted) {
             ctx.fillStyle = "white";
             ctx.font = "12px Arial";
-            ctx.fillText(r.stone,r.x+10,r.y-5);
+            ctx.fillText(r.stone,r.x + 10,r.y - 5);
         }
     });
 
@@ -560,10 +561,10 @@ function draw() {
         ctx.fillStyle = "#236b23";
         ctx.fillRect(b.x,b.y,b.size,b.size);
         ctx.fillStyle = "purple";
-        for (let i=0;i<b.berries;i++) ctx.fillRect(b.x+5+i*4,b.y+8,3,3);
+        for (let i = 0; i < b.berries; i++) ctx.fillRect(b.x + 5 + i * 4,b.y + 8,3,3);
         ctx.fillStyle = "white";
         ctx.font = "12px Arial";
-        ctx.fillText(b.berries,b.x+10,b.y-5);
+        ctx.fillText(b.berries,b.x + 10,b.y - 5);
     });
 
     campfires.forEach(f => {
@@ -572,7 +573,7 @@ function draw() {
 
         if (f.lit) {
             ctx.fillStyle = "yellow";
-            ctx.fillRect(f.x+8,f.y-8,14,14);
+            ctx.fillRect(f.x + 8,f.y - 8,14,14);
         }
     });
 
@@ -586,9 +587,9 @@ function draw() {
             ctx.fillStyle = "red";
             ctx.fillRect(m.x,m.y,m.size,m.size);
             ctx.fillStyle = "black";
-            ctx.fillRect(m.x,m.y-10,m.size,5);
+            ctx.fillRect(m.x,m.y - 10,m.size,5);
             ctx.fillStyle = "lime";
-            ctx.fillRect(m.x,m.y-10,m.size*(m.health/40),5);
+            ctx.fillRect(m.x,m.y - 10,m.size * (m.health / 40),5);
         }
     });
 
@@ -601,6 +602,7 @@ function draw() {
     }
 
     drawHUD();
+
     drawButton(820,20,150,40,"Recipe Book",() => {
         if (!currentAction && !campfirePanelOpen) recipeBookOpen = true;
     });
@@ -637,7 +639,8 @@ function drawHUD() {
     ctx.fillText("Axe: " + player.axe,20,265);
     ctx.fillText("Pickaxe: " + player.pickaxe,20,290);
     ctx.fillText("Weapon: " + player.weapon,20,315);
-ctx.fillText("Version: " + GAME_VERSION,20,340
+    ctx.fillText("Version: " + GAME_VERSION,20,340);
+
     if (messageTimer > 0) ctx.fillText(message,330,40);
     ctx.fillText("WASD Move | E Gather | F Eat Best Food | Space Attack | Click Fire",20,580);
 }
@@ -656,20 +659,20 @@ function drawRecipeBook() {
 
     const tabs = ["Tools","Weapons","Structures"];
     tabs.forEach((tab,i) => {
-        drawButton(250+i*130,130,110,35,tab,() => selectedTab = tab);
+        drawButton(250 + i * 130,130,110,35,tab,() => selectedTab = tab);
     });
 
     const visible = recipes.filter(r => r.tab === selectedTab);
 
     visible.forEach((r,i) => {
-        const y = 190 + i*85;
+        const y = 190 + i * 85;
         ctx.fillStyle = "white";
         ctx.font = "20px Arial";
         ctx.fillText(r.name,260,y);
         ctx.font = "15px Arial";
-        ctx.fillText("Cost: " + r.wood + " Wood, " + r.stone + " Stone",260,y+25);
-        ctx.fillText("Time: " + r.time + " minutes",260,y+45);
-        drawButton(600,y-25,110,40,"Craft",() => startCraft(r));
+        ctx.fillText("Cost: " + r.wood + " Wood, " + r.stone + " Stone",260,y + 25);
+        ctx.fillText("Time: " + r.time + " minutes",260,y + 45);
+        drawButton(600,y - 25,110,40,"Craft",() => startCraft(r));
     });
 }
 
