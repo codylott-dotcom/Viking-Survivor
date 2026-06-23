@@ -2,23 +2,11 @@
 <html>
 <head>
 <title>Viking Island Survivor</title>
-
 <style>
-body {
-    margin: 0;
-    overflow: hidden;
-    background: #111;
-    font-family: Arial, sans-serif;
-}
-
-canvas {
-    display: block;
-    margin: auto;
-    background: #4d9a4d;
-}
+body { margin: 0; overflow: hidden; background: #111; font-family: Arial, sans-serif; }
+canvas { display: block; margin: auto; background: #4d9a4d; }
 </style>
 </head>
-
 <body>
 
 <canvas id="game" width="1000" height="600"></canvas>
@@ -28,18 +16,11 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
 const player = {
-    x: 500,
-    y: 300,
-    size: 30,
-    speed: 4,
-    wood: 0,
-    stone: 0,
-    berries: 0,
-    meat: 0,
-    health: 100,
-    hunger: 100,
-    thirst: 100,
-    attackCooldown: 0,
+    x: 500, y: 300, size: 30, speed: 4,
+    wood: 0, stone: 0, berries: 0, meat: 0,
+    health: 100, hunger: 100, thirst: 100,
+    hasAxe: false,
+    attackDamage: 20,
     alive: true
 };
 
@@ -67,7 +48,16 @@ const monsters = [
 ];
 
 document.addEventListener("keydown", e => {
-    keys[e.key.toLowerCase()] = true;
+    const key = e.key.toLowerCase();
+
+    if (!keys[key]) {
+        if (key === "e") gather();
+        if (key === "f") eatBerries();
+        if (key === " ") attack();
+        if (key === "c") craftAxe();
+    }
+
+    keys[key] = true;
 });
 
 document.addEventListener("keyup", e => {
@@ -75,12 +65,10 @@ document.addEventListener("keyup", e => {
 });
 
 function isTouching(a, b) {
-    return (
-        a.x < b.x + b.size &&
-        a.x + a.size > b.x &&
-        a.y < b.y + b.size &&
-        a.y + a.size > b.y
-    );
+    return a.x < b.x + b.size &&
+           a.x + a.size > b.x &&
+           a.y < b.y + b.size &&
+           a.y + a.size > b.y;
 }
 
 function distance(a, b) {
@@ -97,18 +85,12 @@ function update() {
     if (keys["a"]) player.x -= player.speed;
     if (keys["d"]) player.x += player.speed;
 
-    if (keys["e"]) gather();
-    if (keys["f"]) eatBerries();
-    if (keys[" "]) attack();
-
     player.hunger -= 0.01;
     player.thirst -= 0.015;
 
     if (player.hunger <= 0 || player.thirst <= 0) {
         player.health -= 0.03;
     }
-
-    if (player.attackCooldown > 0) player.attackCooldown--;
 
     player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
     player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
@@ -145,15 +127,21 @@ function updateMonsters() {
 
 function gather() {
     trees.forEach(tree => {
-        if (isTouching(player, tree)) player.wood += 1;
+        if (isTouching(player, tree)) {
+            player.wood += player.hasAxe ? 2 : 1;
+        }
     });
 
     rocks.forEach(rock => {
-        if (isTouching(player, rock)) player.stone += 1;
+        if (isTouching(player, rock)) {
+            player.stone += 1;
+        }
     });
 
     berryBushes.forEach(bush => {
-        if (isTouching(player, bush)) player.berries += 1;
+        if (isTouching(player, bush)) {
+            player.berries += 1;
+        }
     });
 }
 
@@ -165,20 +153,25 @@ function eatBerries() {
     }
 }
 
-function attack() {
-    if (player.attackCooldown > 0) return;
+function craftAxe() {
+    if (!player.hasAxe && player.wood >= 3 && player.stone >= 2) {
+        player.wood -= 3;
+        player.stone -= 2;
+        player.hasAxe = true;
+        player.attackDamage = 35;
+    }
+}
 
+function attack() {
     monsters.forEach(monster => {
         if (monster.health > 0 && distance(player, monster) < 55) {
-            monster.health -= 20;
+            monster.health -= player.attackDamage;
 
             if (monster.health <= 0) {
                 player.meat += 1;
             }
         }
     });
-
-    player.attackCooldown = 30;
 }
 
 function draw() {
@@ -214,7 +207,6 @@ function draw() {
 
             ctx.fillStyle = "black";
             ctx.fillRect(monster.x, monster.y - 10, monster.size, 5);
-
             ctx.fillStyle = "lime";
             ctx.fillRect(monster.x, monster.y - 10, monster.size * (monster.health / 40), 5);
         }
@@ -232,20 +224,19 @@ function draw() {
     ctx.fillText("Stone: " + player.stone, 20, 125);
     ctx.fillText("Berries: " + player.berries, 20, 150);
     ctx.fillText("Meat: " + player.meat, 20, 175);
+    ctx.fillText("Axe: " + (player.hasAxe ? "Yes" : "No"), 20, 200);
 
-    ctx.fillText("WASD = Move | E = Gather | F = Eat Berries | Space = Attack", 20, 580);
+    ctx.fillText("WASD Move | E Gather | F Eat | Space Attack | C Craft Axe", 20, 580);
 
     if (!player.alive) {
-        ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
+        ctx.fillStyle = "rgba(0,0,0,0.75)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-
         ctx.fillStyle = "red";
         ctx.font = "60px Arial";
         ctx.fillText("YOU DIED", 360, 280);
-
         ctx.fillStyle = "white";
         ctx.font = "24px Arial";
-        ctx.fillText("Refresh the page to restart", 365, 330);
+        ctx.fillText("Refresh to restart", 405, 330);
     }
 }
 
@@ -257,6 +248,5 @@ function gameLoop() {
 
 gameLoop();
 </script>
-
 </body>
 </html>
