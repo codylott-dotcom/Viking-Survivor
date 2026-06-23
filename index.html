@@ -24,13 +24,14 @@ const player = {
 };
 
 let day = 1;
-let minutes = 420; // 7:00 AM
+let minutes = 420;
 let movementCounter = 0;
 let recipeBookOpen = false;
 let selectedTab = "Tools";
 let message = "";
 let messageTimer = 0;
-let gatherCooldown = 0;
+
+let currentAction = null;
 
 const keys = {};
 const buttons = [];
@@ -69,11 +70,13 @@ const shelters = [];
 
 document.addEventListener("keydown", e => {
     const key = e.key.toLowerCase();
+
     if (!keys[key]) {
-        if (key === "e") gather();
+        if (key === "e") startGather();
         if (key === "f") eatBerries();
         if (key === " ") attack();
     }
+
     keys[key] = true;
 });
 
@@ -97,8 +100,36 @@ function setMessage(text) {
     messageTimer = 180;
 }
 
+function startAction(name, durationFrames, timeCost, complete) {
+    if (currentAction) {
+        setMessage("Already doing something.");
+        return;
+    }
+
+    currentAction = {
+        name,
+        durationFrames,
+        remainingFrames: durationFrames,
+        timeCost,
+        complete
+    };
+}
+
+function updateAction() {
+    if (!currentAction) return;
+
+    currentAction.remainingFrames--;
+
+    if (currentAction.remainingFrames <= 0) {
+        advanceTime(currentAction.timeCost);
+        currentAction.complete();
+        currentAction = null;
+    }
+}
+
 function advanceTime(amount) {
     minutes += amount;
+
     while (minutes >= 1440) {
         minutes -= 1440;
         day++;
@@ -151,8 +182,11 @@ function distance(a,b) {
 function update() {
     if (!player.alive) return;
 
+    updateAction();
+
     let moved = false;
-    if (!recipeBookOpen) {
+
+    if (!recipeBookOpen && !currentAction) {
         if (keys["w"]) { player.y -= player.speed; moved = true; }
         if (keys["s"]) { player.y += player.speed; moved = true; }
         if (keys["a"]) { player.x -= player.speed; moved = true; }
@@ -167,7 +201,6 @@ function update() {
         }
     }
 
-    if (gatherCooldown > 0) gatherCooldown--;
     if (messageTimer > 0) messageTimer--;
 
     player.x = Math.max(0, Math.min(canvas.width-player.size, player.x));
@@ -229,25 +262,28 @@ function updateMonsters() {
     });
 }
 
-function gather() {
-    if (recipeBookOpen) return;
-
-    if (gatherCooldown > 0) {
-        setMessage("Still gathering...");
-        return;
-    }
+function startGather() {
+    if (recipeBookOpen || currentAction) return;
 
     for (const t of trees) {
         if (isTouching(player,t)) {
             if (t.depleted) return setMessage("Only a stump remains.");
-            t.wood--; player.wood++;
-            advanceTime(player.axe === "Stone Axe" ? 15 : 25);
-            gatherCooldown = player.axe === "Stone Axe" ? 90 : 150;
-            if (t.wood <= 0) {
-                t.depleted = true;
-                t.respawnTimer = 10800;
-                setMessage("Tree stripped into a stump.");
-            } else setMessage("Gathered 1 wood.");
+
+            const timeCost = player.axe === "Stone Axe" ? 15 : 25;
+            const duration = player.axe === "Stone Axe" ? 90 : 150;
+
+            startAction("Gathering Wood", duration, timeCost, () => {
+                t.wood--;
+                player.wood++;
+
+                if (t.wood <= 0) {
+                    t.depleted = true;
+                    t.respawnTimer = 10800;
+                    setMessage("Tree stripped into a stump.");
+                } else {
+                    setMessage("Gathered 1 wood.");
+                }
+            });
             return;
         }
     }
@@ -255,14 +291,22 @@ function gather() {
     for (const r of rocks) {
         if (isTouching(player,r)) {
             if (r.depleted) return setMessage("Rock is depleted.");
-            r.stone--; player.stone++;
-            advanceTime(player.pickaxe === "Stone Pickaxe" ? 20 : 35);
-            gatherCooldown = player.pickaxe === "Stone Pickaxe" ? 120 : 210;
-            if (r.stone <= 0) {
-                r.depleted = true;
-                r.respawnTimer = 10800;
-                setMessage("Rock depleted.");
-            } else setMessage("Gathered 1 stone.");
+
+            const timeCost = player.pickaxe === "Stone Pickaxe" ? 20 : 35;
+            const duration = player.pickaxe === "Stone Pickaxe" ? 120 : 210;
+
+            startAction("Gathering Stone", duration, timeCost, () => {
+                r.stone--;
+                player.stone++;
+
+                if (r.stone <= 0) {
+                    r.depleted = true;
+                    r.respawnTimer = 10800;
+                    setMessage("Rock depleted.");
+                } else {
+                    setMessage("Gathered 1 stone.");
+                }
+            });
             return;
         }
     }
@@ -270,11 +314,13 @@ function gather() {
     for (const b of berryBushes) {
         if (isTouching(player,b)) {
             if (b.berries <= 0) return setMessage("No berries left.");
-            b.berries--; player.berries++;
-            advanceTime(10);
-            gatherCooldown = 72;
-            if (b.regrowTimer <= 0) b.regrowTimer = 1800;
-            setMessage("Picked 1 berry.");
+
+            startAction("Picking Berries", 72, 10, () => {
+                b.berries--;
+                player.berries++;
+                if (b.regrowTimer <= 0) b.regrowTimer = 1800;
+                setMessage("Picked 1 berry.");
+            });
             return;
         }
     }
@@ -283,6 +329,8 @@ function gather() {
 }
 
 function eatBerries() {
+    if (currentAction) return;
+
     if (player.berries > 0 && player.hunger < 100) {
         player.berries--;
         player.hunger = Math.min(100, player.hunger + 15);
@@ -292,47 +340,56 @@ function eatBerries() {
 }
 
 function attack() {
-    if (recipeBookOpen) return;
+    if (recipeBookOpen || currentAction) return;
 
     let hit = false;
+
     monsters.forEach(m => {
         if (m.health > 0 && distance(player,m) < 55) {
             m.health -= player.attackDamage;
             hit = true;
+
             if (m.health <= 0) {
                 player.meat++;
                 setMessage("Monster killed. Gained raw meat.");
-            } else setMessage("You hit the monster.");
+            } else {
+                setMessage("You hit the monster.");
+            }
         }
     });
 
     if (hit) advanceTime(5);
 }
 
-function craft(recipe) {
+function startCraft(recipe) {
+    if (currentAction) return setMessage("Already doing something.");
+
     if (player.wood < recipe.wood || player.stone < recipe.stone) {
-        setMessage("Not enough resources.");
-        return;
+        return setMessage("Not enough resources.");
     }
 
     if (recipe.name === "Stone Axe" && player.axe !== "None") return setMessage("Already have axe.");
     if (recipe.name === "Stone Pickaxe" && player.pickaxe !== "None") return setMessage("Already have pickaxe.");
     if (recipe.name === "Stone Spear" && player.weapon !== "Fists") return setMessage("Already have weapon.");
 
+    recipeBookOpen = false;
     player.wood -= recipe.wood;
     player.stone -= recipe.stone;
-    advanceTime(recipe.time);
 
-    if (recipe.name === "Stone Axe") player.axe = "Stone Axe";
-    if (recipe.name === "Stone Pickaxe") player.pickaxe = "Stone Pickaxe";
-    if (recipe.name === "Stone Spear") {
-        player.weapon = "Stone Spear";
-        player.attackDamage = 30;
-    }
-    if (recipe.name === "Campfire") campfires.push({x:player.x+40,y:player.y,size:30});
-    if (recipe.name === "Lean-To") shelters.push({x:player.x+40,y:player.y,size:45});
+    const duration = Math.max(90, recipe.time * 3);
 
-    setMessage("Crafted " + recipe.name + ". Time passed: " + recipe.time + " min.");
+    startAction("Crafting " + recipe.name, duration, recipe.time, () => {
+        if (recipe.name === "Stone Axe") player.axe = "Stone Axe";
+        if (recipe.name === "Stone Pickaxe") player.pickaxe = "Stone Pickaxe";
+        if (recipe.name === "Stone Spear") {
+            player.weapon = "Stone Spear";
+            player.attackDamage = 30;
+        }
+        if (recipe.name === "Campfire") campfires.push({x:player.x+40,y:player.y,size:30});
+        if (recipe.name === "Lean-To") shelters.push({x:player.x+40,y:player.y,size:45});
+
+        setMessage("Finished " + recipe.name + ".");
+    });
 }
 
 function drawButton(x,y,w,h,text,action) {
@@ -344,6 +401,37 @@ function drawButton(x,y,w,h,text,action) {
     ctx.font = "16px Arial";
     ctx.fillText(text,x+10,y+24);
     buttons.push({x,y,w,h,action});
+}
+
+function drawActionBar() {
+    if (!currentAction) return;
+
+    const x = 300;
+    const y = 520;
+    const w = 400;
+    const h = 28;
+
+    const progress = 1 - (currentAction.remainingFrames / currentAction.durationFrames);
+
+    ctx.fillStyle = "rgba(0,0,0,0.75)";
+    ctx.fillRect(x - 20, y - 45, w + 40, 90);
+
+    ctx.fillStyle = "white";
+    ctx.font = "20px Arial";
+    ctx.fillText(currentAction.name, x, y - 15);
+
+    ctx.fillStyle = "#222";
+    ctx.fillRect(x, y, w, h);
+
+    ctx.fillStyle = "gold";
+    ctx.fillRect(x, y, w * progress, h);
+
+    ctx.strokeStyle = "white";
+    ctx.strokeRect(x, y, w, h);
+
+    ctx.fillStyle = "white";
+    ctx.font = "16px Arial";
+    ctx.fillText(Math.ceil(currentAction.remainingFrames / 60) + "s remaining", x + 140, y + 20);
 }
 
 function draw() {
@@ -418,9 +506,13 @@ function draw() {
     }
 
     drawHUD();
-    drawButton(820,20,150,40,"Recipe Book",() => recipeBookOpen = true);
+    drawButton(820,20,150,40,"Recipe Book",() => {
+        if (!currentAction) recipeBookOpen = true;
+    });
 
     if (recipeBookOpen) drawRecipeBook();
+
+    drawActionBar();
 
     if (!player.alive) {
         ctx.fillStyle = "rgba(0,0,0,0.75)";
@@ -445,9 +537,10 @@ function drawHUD() {
     ctx.fillText("Stone: " + player.stone,20,160);
     ctx.fillText("Berries: " + player.berries,20,185);
     ctx.fillText("Raw Meat: " + player.meat,20,210);
-    ctx.fillText("Axe: " + player.axe,20,240);
-    ctx.fillText("Pickaxe: " + player.pickaxe,20,265);
-    ctx.fillText("Weapon: " + player.weapon,20,290);
+    ctx.fillText("Cooked Meat: " + player.cookedMeat,20,235);
+    ctx.fillText("Axe: " + player.axe,20,265);
+    ctx.fillText("Pickaxe: " + player.pickaxe,20,290);
+    ctx.fillText("Weapon: " + player.weapon,20,315);
 
     if (messageTimer > 0) ctx.fillText(message,330,40);
     ctx.fillText("WASD Move | E Gather | F Eat | Space Attack | Mouse Craft",20,580);
@@ -471,6 +564,7 @@ function drawRecipeBook() {
     });
 
     const visible = recipes.filter(r => r.tab === selectedTab);
+
     visible.forEach((r,i) => {
         const y = 190 + i*85;
         ctx.fillStyle = "white";
@@ -479,7 +573,7 @@ function drawRecipeBook() {
         ctx.font = "15px Arial";
         ctx.fillText("Cost: " + r.wood + " Wood, " + r.stone + " Stone",260,y+25);
         ctx.fillText("Time: " + r.time + " minutes",260,y+45);
-        drawButton(600,y-25,110,40,"Craft",() => craft(r));
+        drawButton(600,y-25,110,40,"Craft",() => startCraft(r));
     });
 }
 
