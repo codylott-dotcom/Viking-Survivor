@@ -7,7 +7,8 @@
 body {
     margin: 0;
     overflow: hidden;
-    background: #222;
+    background: #111;
+    font-family: Arial, sans-serif;
 }
 
 canvas {
@@ -30,10 +31,36 @@ const player = {
     x: 500,
     y: 300,
     size: 30,
-    speed: 4
+    speed: 4,
+    wood: 0,
+    stone: 0,
+    berries: 0,
+    health: 100,
+    hunger: 100,
+    thirst: 100
 };
 
 const keys = {};
+
+const trees = [
+    {x: 120, y: 110, size: 35},
+    {x: 260, y: 420, size: 35},
+    {x: 760, y: 150, size: 35}
+];
+
+const rocks = [
+    {x: 420, y: 120, size: 30},
+    {x: 850, y: 420, size: 30}
+];
+
+const berryBushes = [
+    {x: 180, y: 500, size: 28},
+    {x: 640, y: 360, size: 28}
+];
+
+const monsters = [
+    {x: 700, y: 300, size: 30}
+];
 
 document.addEventListener("keydown", e => {
     keys[e.key.toLowerCase()] = true;
@@ -43,23 +70,99 @@ document.addEventListener("keyup", e => {
     keys[e.key.toLowerCase()] = false;
 });
 
+function isTouching(a, b) {
+    return (
+        a.x < b.x + b.size &&
+        a.x + a.size > b.x &&
+        a.y < b.y + b.size &&
+        a.y + a.size > b.y
+    );
+}
+
 function update() {
     if (keys["w"]) player.y -= player.speed;
     if (keys["s"]) player.y += player.speed;
     if (keys["a"]) player.x -= player.speed;
     if (keys["d"]) player.x += player.speed;
+
+    if (keys["e"]) {
+        gather();
+    }
+
+    player.hunger -= 0.01;
+    player.thirst -= 0.015;
+
+    if (player.hunger <= 0 || player.thirst <= 0) {
+        player.health -= 0.03;
+    }
+
+    player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
+    player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
+}
+
+function gather() {
+    trees.forEach(tree => {
+        if (isTouching(player, tree)) {
+            player.wood += 1;
+        }
+    });
+
+    rocks.forEach(rock => {
+        if (isTouching(player, rock)) {
+            player.stone += 1;
+        }
+    });
+
+    berryBushes.forEach(bush => {
+        if (isTouching(player, bush)) {
+            player.berries += 1;
+        }
+    });
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // ground
     ctx.fillStyle = "#4d9a4d";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // player
+    trees.forEach(tree => {
+        ctx.fillStyle = "#5b3a1e";
+        ctx.fillRect(tree.x + 12, tree.y + 20, 10, 25);
+        ctx.fillStyle = "#0f5c20";
+        ctx.fillRect(tree.x, tree.y, tree.size, tree.size);
+    });
+
+    rocks.forEach(rock => {
+        ctx.fillStyle = "gray";
+        ctx.fillRect(rock.x, rock.y, rock.size, rock.size);
+    });
+
+    berryBushes.forEach(bush => {
+        ctx.fillStyle = "#236b23";
+        ctx.fillRect(bush.x, bush.y, bush.size, bush.size);
+        ctx.fillStyle = "purple";
+        ctx.fillRect(bush.x + 8, bush.y + 8, 5, 5);
+        ctx.fillRect(bush.x + 18, bush.y + 15, 5, 5);
+    });
+
+    monsters.forEach(monster => {
+        ctx.fillStyle = "red";
+        ctx.fillRect(monster.x, monster.y, monster.size, monster.size);
+    });
+
     ctx.fillStyle = "blue";
     ctx.fillRect(player.x, player.y, player.size, player.size);
+
+    ctx.fillStyle = "white";
+    ctx.font = "18px Arial";
+    ctx.fillText("Health: " + Math.floor(player.health), 20, 25);
+    ctx.fillText("Hunger: " + Math.floor(player.hunger), 20, 50);
+    ctx.fillText("Thirst: " + Math.floor(player.thirst), 20, 75);
+    ctx.fillText("Wood: " + player.wood, 20, 100);
+    ctx.fillText("Stone: " + player.stone, 20, 125);
+    ctx.fillText("Berries: " + player.berries, 20, 150);
+    ctx.fillText("WASD = Move | E = Gather", 20, 580);
 }
 
 function gameLoop() {
