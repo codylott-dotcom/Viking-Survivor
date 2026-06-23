@@ -19,27 +19,32 @@ const player = {
     x: 500, y: 300, size: 30, speed: 4,
     wood: 0, stone: 0, berries: 0, meat: 0,
     health: 100, hunger: 100, thirst: 100,
-    hasAxe: false,
+    axe: "None",
+    pickaxe: "None",
+    weapon: "Fists",
     attackDamage: 20,
     alive: true
 };
 
 const keys = {};
+let message = "";
+let messageTimer = 0;
+let gatherCooldown = 0;
 
 const trees = [
-    {x: 120, y: 110, size: 35},
-    {x: 260, y: 420, size: 35},
-    {x: 760, y: 150, size: 35}
+    {x: 120, y: 110, size: 35, wood: 10, maxWood: 10, depleted: false, respawnTimer: 0},
+    {x: 260, y: 420, size: 35, wood: 10, maxWood: 10, depleted: false, respawnTimer: 0},
+    {x: 760, y: 150, size: 35, wood: 10, maxWood: 10, depleted: false, respawnTimer: 0}
 ];
 
 const rocks = [
-    {x: 420, y: 120, size: 30},
-    {x: 850, y: 420, size: 30}
+    {x: 420, y: 120, size: 30, stone: 8, maxStone: 8, depleted: false, respawnTimer: 0},
+    {x: 850, y: 420, size: 30, stone: 8, maxStone: 8, depleted: false, respawnTimer: 0}
 ];
 
 const berryBushes = [
-    {x: 180, y: 500, size: 28},
-    {x: 640, y: 360, size: 28}
+    {x: 180, y: 500, size: 28, berries: 5, maxBerries: 5, regrowTimer: 0},
+    {x: 640, y: 360, size: 28, berries: 5, maxBerries: 5, regrowTimer: 0}
 ];
 
 const monsters = [
@@ -54,7 +59,8 @@ document.addEventListener("keydown", e => {
         if (key === "e") gather();
         if (key === "f") eatBerries();
         if (key === " ") attack();
-        if (key === "c") craftAxe();
+        if (key === "1") craftStoneAxe();
+        if (key === "2") craftStonePickaxe();
     }
 
     keys[key] = true;
@@ -63,6 +69,11 @@ document.addEventListener("keydown", e => {
 document.addEventListener("keyup", e => {
     keys[e.key.toLowerCase()] = false;
 });
+
+function setMessage(text) {
+    message = text;
+    messageTimer = 180;
+}
 
 function isTouching(a, b) {
     return a.x < b.x + b.size &&
@@ -85,6 +96,9 @@ function update() {
     if (keys["a"]) player.x -= player.speed;
     if (keys["d"]) player.x += player.speed;
 
+    if (gatherCooldown > 0) gatherCooldown--;
+    if (messageTimer > 0) messageTimer--;
+
     player.hunger -= 0.01;
     player.thirst -= 0.015;
 
@@ -95,12 +109,45 @@ function update() {
     player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));
     player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));
 
+    updateResources();
     updateMonsters();
 
     if (player.health <= 0) {
         player.health = 0;
         player.alive = false;
     }
+}
+
+function updateResources() {
+    trees.forEach(tree => {
+        if (tree.depleted) {
+            tree.respawnTimer--;
+            if (tree.respawnTimer <= 0) {
+                tree.depleted = false;
+                tree.wood = tree.maxWood;
+            }
+        }
+    });
+
+    rocks.forEach(rock => {
+        if (rock.depleted) {
+            rock.respawnTimer--;
+            if (rock.respawnTimer <= 0) {
+                rock.depleted = false;
+                rock.stone = rock.maxStone;
+            }
+        }
+    });
+
+    berryBushes.forEach(bush => {
+        if (bush.berries < bush.maxBerries) {
+            bush.regrowTimer--;
+            if (bush.regrowTimer <= 0) {
+                bush.berries++;
+                bush.regrowTimer = 1800;
+            }
+        }
+    });
 }
 
 function updateMonsters() {
@@ -121,44 +168,123 @@ function updateMonsters() {
         if (isTouching(player, monster) && monster.damageCooldown <= 0) {
             player.health -= 10;
             monster.damageCooldown = 60;
+            setMessage("The monster claws you!");
         }
     });
 }
 
 function gather() {
-    trees.forEach(tree => {
+    if (gatherCooldown > 0) {
+        setMessage("You are still gathering...");
+        return;
+    }
+
+    for (const tree of trees) {
         if (isTouching(player, tree)) {
-            player.wood += player.hasAxe ? 2 : 1;
-        }
-    });
+            if (tree.depleted) {
+                setMessage("This tree is only a stump.");
+                return;
+            }
 
-    rocks.forEach(rock => {
+            tree.wood--;
+            player.wood++;
+            gatherCooldown = player.axe === "Stone Axe" ? 90 : 150;
+
+            if (tree.wood <= 0) {
+                tree.depleted = true;
+                tree.respawnTimer = 10800;
+                setMessage("You stripped the tree into a stump.");
+            } else {
+                setMessage("Gathered 1 wood.");
+            }
+            return;
+        }
+    }
+
+    for (const rock of rocks) {
         if (isTouching(player, rock)) {
-            player.stone += 1;
-        }
-    });
+            if (rock.depleted) {
+                setMessage("This rock is depleted.");
+                return;
+            }
 
-    berryBushes.forEach(bush => {
-        if (isTouching(player, bush)) {
-            player.berries += 1;
+            rock.stone--;
+            player.stone++;
+            gatherCooldown = player.pickaxe === "Stone Pickaxe" ? 120 : 210;
+
+            if (rock.stone <= 0) {
+                rock.depleted = true;
+                rock.respawnTimer = 10800;
+                setMessage("You depleted the rock.");
+            } else {
+                setMessage("Gathered 1 stone.");
+            }
+            return;
         }
-    });
+    }
+
+    for (const bush of berryBushes) {
+        if (isTouching(player, bush)) {
+            if (bush.berries <= 0) {
+                setMessage("No berries left. They need time to regrow.");
+                return;
+            }
+
+            bush.berries--;
+            player.berries++;
+            gatherCooldown = 72;
+            if (bush.berries < bush.maxBerries && bush.regrowTimer <= 0) {
+                bush.regrowTimer = 1800;
+            }
+            setMessage("Picked 1 berry.");
+            return;
+        }
+    }
+
+    setMessage("Nothing to gather here.");
 }
 
 function eatBerries() {
     if (player.berries > 0 && player.hunger < 100) {
-        player.berries -= 1;
+        player.berries--;
         player.hunger += 15;
         if (player.hunger > 100) player.hunger = 100;
+        setMessage("Ate berries.");
+    } else {
+        setMessage("No berries to eat or not hungry.");
     }
 }
 
-function craftAxe() {
-    if (!player.hasAxe && player.wood >= 3 && player.stone >= 2) {
+function craftStoneAxe() {
+    if (player.axe !== "None") {
+        setMessage("You already have an axe.");
+        return;
+    }
+
+    if (player.wood >= 3 && player.stone >= 2) {
         player.wood -= 3;
         player.stone -= 2;
-        player.hasAxe = true;
+        player.axe = "Stone Axe";
         player.attackDamage = 35;
+        setMessage("Crafted Stone Axe.");
+    } else {
+        setMessage("Need 3 wood and 2 stone for Stone Axe.");
+    }
+}
+
+function craftStonePickaxe() {
+    if (player.pickaxe !== "None") {
+        setMessage("You already have a pickaxe.");
+        return;
+    }
+
+    if (player.wood >= 3 && player.stone >= 3) {
+        player.wood -= 3;
+        player.stone -= 3;
+        player.pickaxe = "Stone Pickaxe";
+        setMessage("Crafted Stone Pickaxe.");
+    } else {
+        setMessage("Need 3 wood and 3 stone for Stone Pickaxe.");
     }
 }
 
@@ -166,9 +292,11 @@ function attack() {
     monsters.forEach(monster => {
         if (monster.health > 0 && distance(player, monster) < 55) {
             monster.health -= player.attackDamage;
+            setMessage("You hit the monster.");
 
             if (monster.health <= 0) {
-                player.meat += 1;
+                player.meat++;
+                setMessage("Monster killed. Gained 1 meat.");
             }
         }
     });
@@ -181,23 +309,47 @@ function draw() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     trees.forEach(tree => {
-        ctx.fillStyle = "#5b3a1e";
-        ctx.fillRect(tree.x + 12, tree.y + 20, 10, 25);
-        ctx.fillStyle = "#0f5c20";
-        ctx.fillRect(tree.x, tree.y, tree.size, tree.size);
+        if (tree.depleted) {
+            ctx.fillStyle = "#5b3a1e";
+            ctx.fillRect(tree.x + 8, tree.y + 20, 18, 12);
+        } else {
+            ctx.fillStyle = "#5b3a1e";
+            ctx.fillRect(tree.x + 12, tree.y + 20, 10, 25);
+            ctx.fillStyle = "#0f5c20";
+            ctx.fillRect(tree.x, tree.y, tree.size, tree.size);
+
+            ctx.fillStyle = "white";
+            ctx.font = "12px Arial";
+            ctx.fillText(tree.wood, tree.x + 10, tree.y - 5);
+        }
     });
 
     rocks.forEach(rock => {
-        ctx.fillStyle = "gray";
-        ctx.fillRect(rock.x, rock.y, rock.size, rock.size);
+        if (!rock.depleted) {
+            ctx.fillStyle = "gray";
+            ctx.fillRect(rock.x, rock.y, rock.size, rock.size);
+
+            ctx.fillStyle = "white";
+            ctx.font = "12px Arial";
+            ctx.fillText(rock.stone, rock.x + 10, rock.y - 5);
+        } else {
+            ctx.fillStyle = "#555";
+            ctx.fillRect(rock.x + 8, rock.y + 12, 14, 8);
+        }
     });
 
     berryBushes.forEach(bush => {
         ctx.fillStyle = "#236b23";
         ctx.fillRect(bush.x, bush.y, bush.size, bush.size);
+
         ctx.fillStyle = "purple";
-        ctx.fillRect(bush.x + 8, bush.y + 8, 5, 5);
-        ctx.fillRect(bush.x + 18, bush.y + 15, 5, 5);
+        for (let i = 0; i < bush.berries; i++) {
+            ctx.fillRect(bush.x + 5 + i * 4, bush.y + 8, 3, 3);
+        }
+
+        ctx.fillStyle = "white";
+        ctx.font = "12px Arial";
+        ctx.fillText(bush.berries, bush.x + 10, bush.y - 5);
     });
 
     monsters.forEach(monster => {
@@ -224,9 +376,18 @@ function draw() {
     ctx.fillText("Stone: " + player.stone, 20, 125);
     ctx.fillText("Berries: " + player.berries, 20, 150);
     ctx.fillText("Meat: " + player.meat, 20, 175);
-    ctx.fillText("Axe: " + (player.hasAxe ? "Yes" : "No"), 20, 200);
+    ctx.fillText("Axe: " + player.axe, 20, 205);
+    ctx.fillText("Pickaxe: " + player.pickaxe, 20, 230);
 
-    ctx.fillText("WASD Move | E Gather | F Eat | Space Attack | C Craft Axe", 20, 580);
+    if (gatherCooldown > 0) {
+        ctx.fillText("Gather Cooldown: " + (gatherCooldown / 60).toFixed(1) + "s", 20, 260);
+    }
+
+    if (messageTimer > 0) {
+        ctx.fillText(message, 350, 40);
+    }
+
+    ctx.fillText("WASD Move | E Gather | F Eat | Space Attack | 1 Axe | 2 Pickaxe", 20, 580);
 
     if (!player.alive) {
         ctx.fillStyle = "rgba(0,0,0,0.75)";
